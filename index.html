@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #3a3939;
+            color: white;
+        }
+        h1 {
+            margin: 20px 0;
+            color: #fff;
+            font-size: 2em;
+        }
+        #qr-result-container {
+            background: #f6f4f4;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 600px;
+            color: #333;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+        .buttonContainer {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        .buttonContainer button {
+            padding: 10px 20px;
+            border: none;
+            background-color: #007BFF;
+            color: #fff;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .buttonContainer button:hover {
+            background-color: #0056b3;
+        }
+        .meal {
+            margin-top: 20px;
+            background: #fff;
+            border-radius: 10px;
+            padding: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            color: #333;
+        }
+        .meal h3 {
+            margin: 0 0 10px;
+        }
+        .meal img {
+            width: 100%;
+            max-width: 300px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        .meal p {
+            color: #555;
+            line-height: 1.6;
+        }
+        #qr-result-container.hidden {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+        /* Popup Modal Styles */
+        #recipe-modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+        .modal-content {
+            background-color: #0e0e0e;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 10px;
+            position: relative;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            cursor: pointer;
+        }
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .modal-content img {
+            width: 100%;
+            max-width: 300px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Scan QR Code</h1>
+    <div style="background-color: goldenrod;"
+     style="display: flex; justify-content: center;">
+        <div  id="my-qr-reader" style="width: 500px;"></div>
+    </div>
+
+    <div style="display: flex;justify-content: center; align-items: center; flex-direction: column; " id="qr-result-container" class="hidden">
+        <h2>Your QR Code Content:</h2>
+        <p id="qr-content" class="qr-content"></p>
+        <div class="buttonContainer">
+            <button id="copy-button"><i class="fas fa-copy"></i> Copy</button>
+        </div>
+        <div id="meal-data-container"></div>
+    </div>
+
+    <!-- Popup Modal -->
+    <div id="recipe-modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="modal-recipe-content"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script>
+        var globalQrContent = '';
+
+        function domReady(fn){
+            if(document.readyState === "complete" || document.readyState === "interactive"){
+                setTimeout(fn, 1);
+            } else {
+                document.addEventListener("DOMContentLoaded", fn);
+            }
+        }
+
+        domReady(function(){
+            var qrResultContainer = document.getElementById('qr-result-container');
+            var qrContent = document.getElementById('qr-content');
+            var copyButton = document.getElementById('copy-button');
+            var mealDataContainer = document.getElementById('meal-data-container');
+            var modal = document.getElementById("recipe-modal");
+            var modalContent = document.getElementById("modal-recipe-content");
+            var span = document.getElementsByClassName("close")[0];
+            var lastResults, countResults = 0;
+
+            span.onclick = function() {
+                modal.style.display = "none";
+                modalContent.innerHTML = "";
+            }
+
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                    modalContent.innerHTML = "";
+                }
+            }
+
+            function onScanSuccess(decodeText, decodeResult){
+                if(decodeText !== lastResults){
+                    ++countResults;
+                    lastResults = decodeText;
+
+                    // Display the QR code content in the container
+                    qrContent.textContent = decodeText;
+                    qrResultContainer.classList.remove('hidden');
+
+                    globalQrContent = decodeText;
+
+                    function extractProductName(content) {
+                        const productNameKey = "Product Name:";
+                        const startIndex = content.indexOf(productNameKey);
+                        if (startIndex === -1) {
+                            return null; // "Product Name:" not found
+                        }
+                        const startOfProductName = startIndex + productNameKey.length;
+                        const endOfLine = content.indexOf('\n', startOfProductName);
+                        const productName = (endOfLine === -1)
+                            ? content.substring(startOfProductName).trim()
+                            : content.substring(startOfProductName, endOfLine).trim();
+                        return productName;
+                    }
+
+                    function extractExpiryDate(content) {
+                        const expiryDateKey = "Expiry Date:";
+                        const startIndex = content.indexOf(expiryDateKey);
+                        if (startIndex === -1) {
+                            return null;
+                        }
+                        const startOfExpiryDate = startIndex + expiryDateKey.length;
+                        const endOfLine = content.indexOf('\n', startOfExpiryDate);
+                        const expiryDate = (endOfLine === -1)
+                            ? content.substring(startOfExpiryDate).trim()
+                            : content.substring(startOfExpiryDate, endOfLine).trim();
+                        return expiryDate;
+                    }
+
+                    const expiryDate = extractExpiryDate(decodeText);
+                    const productName = extractProductName(decodeText);
+
+                    function calculateDaysLeft(expiryDate) {
+                        const expiry = new Date(expiryDate);
+                        const today = new Date();
+                        const timeDiff = expiry - today;
+                        const daysLeft = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+                        return daysLeft;
+                    }
+
+                    const daysLeftUntilExpiry = calculateDaysLeft(expiryDate);
+                    if (daysLeftUntilExpiry <= 7) {
+                        const apiURL = 'https://www.themealdb.com/api/json/v1/1/filter.php?i=' + productName;
+
+                        fetch(apiURL)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok ' + response.statusText);
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            mealDataContainer.innerHTML = '';
+                            if (data.meals) {
+                                const uniqueMealIds = new Set();
+                                data.meals.forEach(meal => {
+                                    if (!uniqueMealIds.has(meal.idMeal)) {
+                                        uniqueMealIds.add(meal.idMeal);
+                                        const mealElement = document.createElement('div');
+                                        mealElement.className = 'meal';
+                                        mealElement.innerHTML = `
+                                            <h3>${meal.strMeal}</h3>
+                                            <img src="${meal.strMealThumb}" alt="${meal.strMeal}">
+                                            <p>Meal ID: ${meal.idMeal}</p>
+                                            <button class="show-recipe-button" data-mealid="${meal.idMeal}"><i class="fas fa-book-open"></i> Show Recipe</button>
+                                        `;
+                                        mealDataContainer.appendChild(mealElement);
+
+                                        mealElement.querySelector('.show-recipe-button').addEventListener('click', function() {
+                                            const mealId = this.getAttribute('data-mealid');
+                                            const recipeApiUrl = 'https://www.themealdb.com/api/json/v1/1/lookup.php?i=' + mealId;
+
+                                            fetch(recipeApiUrl)
+                                            .then(response => {
+                                                if (!response.ok) {
+                                                    throw new Error('Network response was not ok ' + response.statusText);
+                                                }
+                                                return response.json();
+                                            })
+                                            .then(recipeData => {
+                                                if (recipeData.meals) {
+                                                    const recipe = recipeData.meals[0];
+                                                    modalContent.innerHTML = `
+                                                        <h3>${recipe.strMeal}</h3>
+                                                        <img src="${recipe.strMealThumb}" alt="${recipe.strMeal}">
+                                                        <p>${recipe.strInstructions}</p>
+                                                    `;
+                                                    modal.style.display = "block";
+                                                } else {
+                                                    modalContent.innerHTML = '<p>Recipe not found for this meal.</p>';
+                                                    modal.style.display = "block";
+                                                }
+                                            })
+                                            .catch(error => {
+                                                console.error('There has been a problem with your fetch operation:', error);
+                                            });
+                                        });
+                                    }
+                                });
+                            } else {
+                                mealDataContainer.innerHTML = '<p>No meals found with the specified ingredient.</p>';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('There has been a problem with your fetch operation:', error);
+                        });
+                    } else {
+                        mealDataContainer.innerHTML = '<p>Product expiry is more than 7 days away. No data fetched from the API.</p>';
+                    }
+                }
+            }
+            copyButton.addEventListener('click', function() {
+                var textToCopy = qrContent.textContent;
+                var tempInput = document.createElement('input');
+                tempInput.value = textToCopy;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                alert('Text copied to clipboard: ' + textToCopy);
+            });
+
+            var htmlscanner = new Html5QrcodeScanner(
+                "my-qr-reader", { fps: 10, qrbox: 250 }
+            );
+
+            htmlscanner.render(onScanSuccess);
+        });
+    </script>
+</body>
+</html>
